@@ -78,6 +78,19 @@
   .tile img { width: 64px; height: 64px; object-fit: contain; }
   .tile.known { border-color: #3f7d4e; }
   .tile small { display: block; color: #567; }
+  .scene {
+    max-width: 520px; min-height: 2.8em; margin: 12px auto; padding: 12px; border-radius: 20px;
+    background: #cfe6c5; font-size: min(44px, 9vw); line-height: 1.3;
+  }
+  .scene span { display: inline-block; }
+  .scene .in { animation: hop-in 0.6s ease-out both; }
+  .scene .out { animation: leave 0.9s ease-in both; }
+  @keyframes hop-in { from { opacity: 0; transform: translateY(-40px); } 70% { transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes leave { to { opacity: 0.2; transform: translateY(-14px) rotate(15deg); } }
+  @media (prefers-reduced-motion: reduce) { .scene .in { animation: none; } .scene .out { animation: none; opacity: 0.2; } }
+  .equation { font-size: min(44px, 11vw); font-weight: bold; margin: 8px 0; }
+  .options.nums { grid-template-columns: repeat(4, 1fr); }
+  .options.nums button { font-size: 30px; padding: 12px 0; }
   @media (max-width: 600px) {
     body { font-size: 18px; }
     header { padding: 8px 12px; }
@@ -137,6 +150,7 @@ const FRUITS = `apple 苹果 apple|green-apple 青苹果 green apple|apricot 杏
 |strawberry 草莓 strawberry|tamarillo 树番茄 tamarillo|tangelo 橘柚 tangelo|cherry-tomato 圣女果 cherry tomato
 |watermelon 西瓜 watermelon`.split('|').map(s => { const [id, zh, ...en] = s.trim().split(' '); return { id, zh, en: en.join(' ') }; });
 const FRUIT_QUIZ = 8;
+const MATH_QUIZ = 8;
 const DAILY_ROUNDS = 3;
 const STORE_KEY = 'oliver-bio-station';
 
@@ -202,16 +216,18 @@ function home() {
       <button data-go="wait"><span class="big">📷</span>拍一拍<small>只拍目标动物，别的要忍住</small></button>
       <button data-go="memory"><span class="big">🧠</span>记一记<small>记住动物出现的顺序</small></button>
       <button data-go="fruit"><span class="big">🍎</span>认水果<small>看图片，选出英语名字</small></button>
+      <button data-go="math"><span class="big">🧮</span>算一算<small>数数小动物，做加减法</small></button>
       <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
+      <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
       <p>水果照片来自 <a href="https://github.com/fruits-360/fruits-360-100x100">Fruits-360 数据集</a>（Mihai Oltean），
         <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 许可。</p>
     </details>`;
-  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, book })[b.dataset.go]());
+  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, math: playMath, book })[b.dataset.go]());
 }
 
 function book() {
@@ -254,6 +270,48 @@ function playFruit() {
       beep(660); speak(f.en);
       if (tries === 0) { firstTry++; if (!known(f)) { state.fruits.push(f.id); save(); } }
       i++; later(next, 1800);
+    });
+  })();
+}
+
+function playMath() {
+  reset();
+  const rand = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+  let i = 0, firstTry = 0;
+  (function next() {
+    if (i === MATH_QUIZ) return finish(`你算了 ${MATH_QUIZ} 道题，其中 ${firstTry} 道一次就算对了。`);
+    const animal = sample(ANIMALS, 1)[0], add = Math.random() < 0.5;
+    const a = add ? rand(1, 9) : rand(2, 10), b = add ? rand(1, 10 - a) : rand(1, a);
+    const answer = add ? a + b : a - b;
+    const options = [answer, ...shuffle([...Array(11).keys()].filter(n => n !== answer))
+      .sort((x, y) => Math.abs(x - answer) - Math.abs(y - answer)).slice(0, 3)].sort((x, y) => x - y);
+    const pics = (n, cls) => Array.from({ length: n }, (_, k) =>
+      `<span class="${cls}" style="animation-delay: ${0.5 + k * 0.15}s">${animal.e}</span>`).join('');
+    const story = add
+      ? `草地上有 ${a} 只${animal.name}，又来了 ${b} 只。现在一共有几只？`
+      : `草地上有 ${a} 只${animal.name}，走了 ${b} 只。还剩几只？`;
+    let tries = 0;
+    app.innerHTML = `<p class="progress">第 ${i + 1} / ${MATH_QUIZ} 题</p>
+      <p class="hint">${story}</p>
+      <div class="scene">${add ? pics(a, '') + pics(b, 'in') : pics(a - b, '') + pics(b, 'out')}</div>
+      <p class="equation" id="eq">${a} ${add ? '+' : '−'} ${b} = ?</p>
+      <div class="options nums">${options.map(n => `<button>${n}</button>`).join('')}</div>
+      <p class="msg" id="msg"></p>`;
+    const msg = document.getElementById('msg');
+    const buttons = app.querySelectorAll('.options button');
+    buttons.forEach(b2 => b2.onclick = () => {
+      if (+b2.textContent !== answer) {
+        tries++; b2.disabled = true; b2.classList.add('nope');
+        msg.textContent = '再数一数小动物。';
+        return;
+      }
+      buttons.forEach(x => x.disabled = true);
+      b2.classList.add('found');
+      document.getElementById('eq').textContent = `${a} ${add ? '+' : '−'} ${b} = ${answer}`;
+      msg.textContent = '算对了！';
+      beep(660);
+      if (tries === 0) firstTry++;
+      i++; later(next, 1500);
     });
   })();
 }
