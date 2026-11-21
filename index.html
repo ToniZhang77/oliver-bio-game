@@ -12,14 +12,14 @@
     font-size: 20px; line-height: 1.6;
   }
   header {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center;
     padding: 12px 24px; background: #3f7d4e; color: #fff;
   }
   header h1 { margin: 0; font-size: 24px; }
   main { max-width: 860px; margin: 0 auto; padding: 24px; text-align: center; }
   button {
     font: inherit; cursor: pointer; border: 2px solid #3f7d4e; border-radius: 14px;
-    background: #fff; color: #24402b; padding: 10px 20px;
+    background: #fff; color: #24402b; padding: 10px 20px; touch-action: manipulation;
   }
   button:hover:not(:disabled) { background: #dcecd6; }
   button:focus-visible { outline: 4px solid #f0b429; }
@@ -33,23 +33,29 @@
   .primary:hover:not(:disabled) { background: #356a42; }
   .hint { font-size: 22px; margin: 8px 0 16px; }
   .emoji { font-size: 44px; line-height: 1; vertical-align: middle; }
-  .grid { display: grid; gap: 8px; justify-content: center; margin: 16px auto; }
-  .grid button { width: 76px; height: 76px; padding: 0; font-size: 42px; line-height: 1; border-color: #b9d3b0; }
+  .grid {
+    --cell: min(76px, calc((100vw - 32px - (var(--cols) - 1) * 8px) / var(--cols)));
+    display: grid; grid-template-columns: repeat(var(--cols), var(--cell));
+    gap: 8px; justify-content: center; margin: 16px auto;
+  }
+  .grid button { width: var(--cell); height: var(--cell); padding: 0; font-size: calc(var(--cell) * 0.55); line-height: 1; border-color: #b9d3b0; }
   .grid button.found { background: #bfe5b3; border-color: #3f7d4e; cursor: default; }
   .grid button.nope { background: #f3e3c3; }
   .stage {
-    width: 260px; height: 260px; margin: 16px auto; border-radius: 50%;
+    --stage: min(260px, 60vw);
+    width: var(--stage); height: var(--stage); margin: 16px auto; border-radius: 50%;
     background: #cfe6c5; display: flex; align-items: center; justify-content: center;
-    font-size: 130px; line-height: 1;
+    font-size: calc(var(--stage) / 2); line-height: 1;
   }
   .msg { min-height: 36px; font-size: 22px; }
   .slots { display: flex; justify-content: center; gap: 8px; margin: 12px 0; min-height: 64px; }
   .slots span {
-    width: 60px; height: 60px; border: 2px dashed #8fb284; border-radius: 12px;
-    font-size: 38px; line-height: 56px;
+    --slot: min(60px, 13vw);
+    width: var(--slot); height: var(--slot); border: 2px dashed #8fb284; border-radius: 12px;
+    font-size: calc(var(--slot) * 0.62); line-height: calc(var(--slot) - 4px);
   }
   .card {
-    display: inline-block; width: 260px; margin: 8px; padding: 16px; border-radius: 16px;
+    display: inline-block; width: 260px; max-width: calc(100% - 16px); margin: 8px; padding: 16px; border-radius: 16px;
     background: #fff; border: 2px solid #3f7d4e; text-align: left; font-size: 17px; vertical-align: top;
   }
   .card .pic { font-size: 64px; text-align: center; line-height: 1.2; }
@@ -58,6 +64,35 @@
   .card p { margin: 4px 0; }
   .progress { color: #567; font-size: 17px; }
   details { text-align: left; margin-top: 32px; font-size: 16px; color: #456; }
+  .fruit-pic {
+    width: min(220px, 60vw); height: min(220px, 60vw); object-fit: contain;
+    background: #fff; border: 2px solid #b9d3b0; border-radius: 20px; padding: 10px;
+  }
+  .fruit-name { font-size: 36px; font-weight: bold; margin: 8px 0; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px; margin: 16px auto; }
+  .options button { font-size: 22px; padding: 16px 8px; min-height: 64px; }
+  .options button.found { background: #bfe5b3; }
+  .options button.nope { background: #f3e3c3; color: #998; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin: 16px 0; }
+  .tile { background: #fff; border: 2px solid #b9d3b0; border-radius: 12px; padding: 8px 4px; font-size: 16px; line-height: 1.3; }
+  .tile img { width: 64px; height: 64px; object-fit: contain; }
+  .tile.known { border-color: #3f7d4e; }
+  .tile small { display: block; color: #567; }
+  @media (max-width: 600px) {
+    body { font-size: 18px; }
+    header { padding: 8px 12px; }
+    header h1 { font-size: 19px; }
+    header button { font-size: 14px; padding: 6px 10px; margin-left: 4px; }
+    main { padding: 12px; }
+    .menu { grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+    .menu button { padding: 14px 6px; font-size: 19px; }
+    .menu .big { font-size: 44px; }
+    .menu small { font-size: 14px; }
+    .hint, .msg { font-size: 19px; }
+    .emoji { font-size: 34px; }
+    .fruit-name { font-size: 30px; }
+    .options button { font-size: 19px; }
+  }
 </style>
 </head>
 <body>
@@ -89,6 +124,19 @@ const ANIMALS = [
   { id: 'dolphin', e: '🐬', name: '海豚', eats: '鱼和乌贼', lives: '海洋', fact: '睡觉时每次只让一半大脑休息。' },
   { id: 'crab', e: '🦀', name: '螃蟹', eats: '藻类、小鱼、小虾', lives: '海边和河里', fact: '大多数螃蟹横着走。' },
 ];
+const FRUITS = `apple 苹果 apple|green-apple 青苹果 green apple|apricot 杏 apricot|avocado 牛油果 avocado|banana 香蕉 banana
+|blackberry 黑莓 blackberry|blueberry 蓝莓 blueberry|prickly-pear 仙人掌果 prickly pear|cantaloupe 哈密瓜 cantaloupe
+|star-fruit 杨桃 star fruit|cherimoya 番荔枝 cherimoya|cherry 樱桃 cherry|clementine 小柑橘 clementine|coconut 椰子 coconut
+|date 椰枣 date|fig 无花果 fig|granadilla 甜百香果 granadilla|grape 葡萄 grape|grapefruit 西柚 grapefruit|guava 番石榴 guava
+|persimmon 柿子 persimmon|kiwi 猕猴桃 kiwi|kumquat 金橘 kumquat|lemon 柠檬 lemon|lime 青柠 lime|lychee 荔枝 lychee
+|mandarin 橘子 mandarin|mango 芒果 mango|mangosteen 山竹 mangosteen|melon 甜瓜 melon|mulberry 桑葚 mulberry
+|nectarine 油桃 nectarine|orange 橙子 orange|papaya 木瓜 papaya|passion-fruit 百香果 passion fruit|peach 桃子 peach
+|flat-peach 蟠桃 flat peach|pear 梨 pear|pepino 人参果 pepino|physalis 灯笼果 physalis|pineapple 菠萝 pineapple
+|dragon-fruit 火龙果 dragon fruit|plum 李子 plum|pomegranate 石榴 pomegranate|pomelo 柚子 pomelo|quince 榅桲 quince
+|rambutan 红毛丹 rambutan|raspberry 树莓 raspberry|redcurrant 红醋栗 redcurrant|snake-fruit 蛇皮果 snake fruit
+|strawberry 草莓 strawberry|tamarillo 树番茄 tamarillo|tangelo 橘柚 tangelo|cherry-tomato 圣女果 cherry tomato
+|watermelon 西瓜 watermelon`.split('|').map(s => { const [id, zh, ...en] = s.trim().split(' '); return { id, zh, en: en.join(' ') }; });
+const FRUIT_QUIZ = 8;
 const DAILY_ROUNDS = 3;
 const STORE_KEY = 'oliver-bio-station';
 
@@ -97,7 +145,7 @@ const today = () => new Date().toLocaleDateString('sv');
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const sample = (a, n) => shuffle(a).slice(0, n);
 
-let state = { cards: [], log: {}, sound: false };
+let state = { cards: [], fruits: [], log: {}, sound: false };
 try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) {}
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
 
@@ -117,6 +165,15 @@ function beep(freq) {
     o.frequency.value = freq; g.gain.value = 0.05;
     o.connect(g); g.connect(audio.destination);
     o.start(); o.stop(audio.currentTime + 0.12);
+  } catch (e) {}
+}
+
+function speak(text) {
+  if (!state.sound) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = 0.85;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
   } catch (e) {}
 }
 
@@ -144,20 +201,61 @@ function home() {
       <button data-go="find"><span class="big">🔍</span>找一找<small>在草地里找到目标动物</small></button>
       <button data-go="wait"><span class="big">📷</span>拍一拍<small>只拍目标动物，别的要忍住</small></button>
       <button data-go="memory"><span class="big">🧠</span>记一记<small>记住动物出现的顺序</small></button>
-      <button data-go="book"><span class="big">📖</span>我的图鉴<small>已收集 ${state.cards.length} / ${ANIMALS.length}</small></button>
+      <button data-go="fruit"><span class="big">🍎</span>认水果<small>看图片，选出英语名字</small></button>
+      <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
+      <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
+      <p>水果照片来自 <a href="https://github.com/fruits-360/fruits-360-100x100">Fruits-360 数据集</a>（Mihai Oltean），
+        <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 许可。</p>
     </details>`;
-  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, book })[b.dataset.go]());
+  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, book })[b.dataset.go]());
 }
 
 function book() {
   reset();
   app.innerHTML = `<p class="hint">📖 我的图鉴（${state.cards.length} / ${ANIMALS.length}）</p>` +
     ANIMALS.map(a => state.cards.includes(a.id) ? cardHtml(a)
-      : `<div class="card locked"><div class="pic">❓</div><h3>还没发现</h3><p>完成一轮观察来解锁</p></div>`).join('');
+      : `<div class="card locked"><div class="pic">❓</div><h3>还没发现</h3><p>完成一轮观察来解锁</p></div>`).join('') +
+    `<p class="hint">🍎 水果图鉴（${state.fruits.length} / ${FRUITS.length}）</p><div class="tiles">` +
+    FRUITS.map(f => { const known = state.fruits.includes(f.id); return `<div class="tile${known ? ' known' : ''}">
+      <img src="fruits/${f.id}.jpg" alt="${f.zh}" loading="lazy"><div>${f.zh}</div><small>${known ? f.en : '？？？'}</small></div>`; }).join('') + '</div>';
+}
+
+function playFruit() {
+  reset();
+  const known = f => state.fruits.includes(f.id);
+  const quiz = shuffle(FRUITS.filter(f => !known(f))).concat(shuffle(FRUITS.filter(known))).slice(0, FRUIT_QUIZ);
+  let i = 0, firstTry = 0;
+  (function next() {
+    if (i === quiz.length) return finish(`你认了 ${quiz.length} 种水果，其中 ${firstTry} 种一次就选对了。`);
+    const f = quiz[i];
+    const options = shuffle([f, ...sample(FRUITS.filter(x => x !== f), 3)]);
+    let tries = 0;
+    app.innerHTML = `<p class="progress">第 ${i + 1} / ${quiz.length} 种水果</p>
+      <img class="fruit-pic" src="fruits/${f.id}.jpg" alt="${f.zh}">
+      <p class="fruit-name">${f.zh}</p>
+      <p class="hint">它的英语名字是哪一个？</p>
+      <div class="options">${options.map((o, k) => `<button data-k="${k}" lang="en">${o.en}</button>`).join('')}</div>
+      <p class="msg" id="msg"></p>`;
+    const msg = document.getElementById('msg');
+    const buttons = app.querySelectorAll('.options button');
+    buttons.forEach(b => b.onclick = () => {
+      if (options[b.dataset.k] !== f) {
+        tries++; b.disabled = true; b.classList.add('nope');
+        msg.textContent = '不是这个，再试试。';
+        return;
+      }
+      buttons.forEach(x => x.disabled = true);
+      b.classList.add('found');
+      msg.textContent = `对了！${f.zh} 是 ${f.en}`;
+      beep(660); speak(f.en);
+      if (tries === 0) { firstTry++; if (!known(f)) { state.fruits.push(f.id); save(); } }
+      i++; later(next, 1800);
+    });
+  })();
 }
 
 function finish(summary) {
@@ -183,14 +281,15 @@ function playFind() {
   let round = 0;
   (function next() {
     if (round === levels.length) return finish(`你搜索了 ${levels.length} 片草地，观察得很仔细。`);
-    const [cols, rows, nTarget] = levels[round];
+    let [cols, rows, nTarget] = levels[round];
+    if (innerWidth < 600 && cols > rows) [cols, rows] = [rows, cols];
     const [target, ...others] = sample(ANIMALS, 2 + Math.min(round + 2, 5));
     let cells = Array.from({ length: cols * rows }, (_, i) => i < nTarget ? target : others[Math.floor(Math.random() * others.length)]);
     cells = shuffle(cells);
     let left = nTarget;
     app.innerHTML = `<p class="progress">第 ${round + 1} / ${levels.length} 片草地</p>
       <p class="hint">找到所有的 <span class="emoji">${target.e}</span> ${target.name}，还有 <b id="left">${left}</b> 只</p>
-      <div class="grid" style="grid-template-columns: repeat(${cols}, 76px)">
+      <div class="grid" style="--cols: ${cols}">
         ${cells.map((a, i) => `<button data-i="${i}" aria-label="${a.name}">${a.e}</button>`).join('')}
       </div><p class="msg" id="msg"></p>`;
     const msg = document.getElementById('msg');
@@ -262,7 +361,7 @@ function playMemory() {
       <p class="hint" id="hint">仔细看，记住 ${seq.length} 只动物出现的顺序</p>
       <div class="stage" id="stage">🌿</div>
       <div class="slots" id="slots"></div>
-      <div class="grid" id="choices" style="grid-template-columns: repeat(6, 76px)"></div>
+      <div class="grid" id="choices" style="--cols: ${innerWidth < 600 ? 3 : 6}"></div>
       <p class="msg" id="msg"></p>`;
     const stage = document.getElementById('stage'), msg = document.getElementById('msg');
     seq.forEach((a, k) => {
