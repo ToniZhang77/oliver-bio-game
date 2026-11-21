@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oliver 的生物观察站</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #eef5ea; color: #24402b;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    font-size: 20px; line-height: 1.6;
+  }
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 24px; background: #3f7d4e; color: #fff;
+  }
+  header h1 { margin: 0; font-size: 24px; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px; text-align: center; }
+  button {
+    font: inherit; cursor: pointer; border: 2px solid #3f7d4e; border-radius: 14px;
+    background: #fff; color: #24402b; padding: 10px 20px;
+  }
+  button:hover:not(:disabled) { background: #dcecd6; }
+  button:focus-visible { outline: 4px solid #f0b429; }
+  header button { border-color: #fff; background: transparent; color: #fff; font-size: 16px; margin-left: 8px; }
+  header button:hover:not(:disabled) { background: #356a42; }
+  .menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 24px 0; }
+  .menu button { padding: 24px 12px; font-size: 22px; }
+  .menu .big { font-size: 56px; display: block; }
+  .menu small { display: block; font-size: 16px; color: #567; }
+  .primary { background: #3f7d4e; color: #fff; font-size: 22px; padding: 14px 32px; }
+  .primary:hover:not(:disabled) { background: #356a42; }
+  .hint { font-size: 22px; margin: 8px 0 16px; }
+  .emoji { font-size: 44px; line-height: 1; vertical-align: middle; }
+  .grid { display: grid; gap: 8px; justify-content: center; margin: 16px auto; }
+  .grid button { width: 76px; height: 76px; padding: 0; font-size: 42px; line-height: 1; border-color: #b9d3b0; }
+  .grid button.found { background: #bfe5b3; border-color: #3f7d4e; cursor: default; }
+  .grid button.nope { background: #f3e3c3; }
+  .stage {
+    width: 260px; height: 260px; margin: 16px auto; border-radius: 50%;
+    background: #cfe6c5; display: flex; align-items: center; justify-content: center;
+    font-size: 130px; line-height: 1;
+  }
+  .msg { min-height: 36px; font-size: 22px; }
+  .slots { display: flex; justify-content: center; gap: 8px; margin: 12px 0; min-height: 64px; }
+  .slots span {
+    width: 60px; height: 60px; border: 2px dashed #8fb284; border-radius: 12px;
+    font-size: 38px; line-height: 56px;
+  }
+  .card {
+    display: inline-block; width: 260px; margin: 8px; padding: 16px; border-radius: 16px;
+    background: #fff; border: 2px solid #3f7d4e; text-align: left; font-size: 17px; vertical-align: top;
+  }
+  .card .pic { font-size: 64px; text-align: center; line-height: 1.2; }
+  .card h3 { margin: 4px 0; text-align: center; font-size: 22px; }
+  .card.locked { border-style: dashed; border-color: #b5c4b0; color: #9aa; text-align: center; }
+  .card p { margin: 4px 0; }
+  .progress { color: #567; font-size: 17px; }
+  details { text-align: left; margin-top: 32px; font-size: 16px; color: #456; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 Oliver 的生物观察站</h1>
+  <div>
+    <button id="soundBtn"></button>
+    <button id="homeBtn">🏕️ 回营地</button>
+  </div>
+</header>
+<main id="app"></main>
+
+<script>
+const ANIMALS = [
+  { id: 'bee', e: '🐝', name: '蜜蜂', eats: '花蜜和花粉', lives: '蜂巢', fact: '会用"跳舞"告诉同伴花在哪里。' },
+  { id: 'butterfly', e: '🦋', name: '蝴蝶', eats: '花蜜', lives: '花丛和草地', fact: '用脚来尝味道。' },
+  { id: 'ant', e: '🐜', name: '蚂蚁', eats: '种子、小虫、甜的东西', lives: '地下的蚁巢', fact: '能搬动比自己重很多倍的东西。' },
+  { id: 'ladybug', e: '🐞', name: '瓢虫', eats: '蚜虫', lives: '叶子和草丛', fact: '一天能吃掉几十只蚜虫，是植物的好帮手。' },
+  { id: 'snail', e: '🐌', name: '蜗牛', eats: '叶子和嫩芽', lives: '潮湿的草丛', fact: '舌头上有成千上万颗小牙齿。' },
+  { id: 'spider', e: '🕷️', name: '蜘蛛', eats: '小昆虫', lives: '蛛网或洞穴', fact: '有 8 条腿，所以它不是昆虫。' },
+  { id: 'caterpillar', e: '🐛', name: '毛毛虫', eats: '叶子', lives: '植物上', fact: '长大后会变成蝴蝶或蛾。' },
+  { id: 'frog', e: '🐸', name: '青蛙', eats: '昆虫', lives: '池塘和湿地', fact: '除了用肺，还能用皮肤呼吸。' },
+  { id: 'turtle', e: '🐢', name: '乌龟', eats: '植物、小鱼、小虫', lives: '水边或陆地', fact: '龟壳是骨头的一部分，不能脱下来。' },
+  { id: 'lizard', e: '🦎', name: '蜥蜴', eats: '昆虫', lives: '岩石、树上和墙上', fact: '很多蜥蜴尾巴断了还能再长出来。' },
+  { id: 'owl', e: '🦉', name: '猫头鹰', eats: '老鼠和小动物', lives: '树林', fact: '头能转大约 270 度。' },
+  { id: 'bat', e: '🦇', name: '蝙蝠', eats: '昆虫或水果', lives: '山洞和树洞', fact: '是唯一会真正飞行的哺乳动物。' },
+  { id: 'penguin', e: '🐧', name: '企鹅', eats: '鱼和磷虾', lives: '南半球的海边', fact: '是鸟，但不会飞，游泳很厉害。' },
+  { id: 'octopus', e: '🐙', name: '章鱼', eats: '螃蟹和贝类', lives: '海底', fact: '有 3 颗心脏，血是蓝色的。' },
+  { id: 'dolphin', e: '🐬', name: '海豚', eats: '鱼和乌贼', lives: '海洋', fact: '睡觉时每次只让一半大脑休息。' },
+  { id: 'crab', e: '🦀', name: '螃蟹', eats: '藻类、小鱼、小虾', lives: '海边和河里', fact: '大多数螃蟹横着走。' },
+];
+const DAILY_ROUNDS = 3;
+const STORE_KEY = 'oliver-bio-station';
+
+const app = document.getElementById('app');
+const today = () => new Date().toLocaleDateString('sv');
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const sample = (a, n) => shuffle(a).slice(0, n);
+
+let state = { cards: [], log: {}, sound: false };
+try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) {}
+const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
+
+let timers = [], keyHandler = null;
+const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; };
+function reset() {
+  timers.forEach(clearTimeout); timers = [];
+  if (keyHandler) { document.removeEventListener('keydown', keyHandler); keyHandler = null; }
+}
+
+let audio;
+function beep(freq) {
+  if (!state.sound) return;
+  try {
+    audio = audio || new AudioContext();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = freq; g.gain.value = 0.05;
+    o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + 0.12);
+  } catch (e) {}
+}
+
+const soundBtn = document.getElementById('soundBtn');
+const paintSound = () => { soundBtn.textContent = state.sound ? '🔊 声音：开' : '🔇 声音：关'; };
+soundBtn.onclick = () => { state.sound = !state.sound; save(); paintSound(); beep(660); };
+document.getElementById('homeBtn').onclick = () => home();
+paintSound();
+
+function cardHtml(a) {
+  return `<div class="card"><div class="pic">${a.e}</div><h3>${a.name}</h3>
+    <p><b>吃什么：</b>${a.eats}</p><p><b>住哪里：</b>${a.lives}</p><p><b>最酷的事：</b>${a.fact}</p></div>`;
+}
+
+function home() {
+  reset();
+  const done = state.log[today()] || 0;
+  const rest = done >= DAILY_ROUNDS
+    ? `<p class="hint">🌳 今天已经完成 ${done} 轮观察了！让眼睛休息一下，去看看真正的大自然吧。</p>`
+    : `<p class="progress">今天的观察任务：${'✅'.repeat(done)}${'⬜'.repeat(DAILY_ROUNDS - done)}</p>`;
+  app.innerHTML = `
+    <p class="hint">你好，小生物学家！今天想做哪种观察？</p>
+    ${rest}
+    <div class="menu">
+      <button data-go="find"><span class="big">🔍</span>找一找<small>在草地里找到目标动物</small></button>
+      <button data-go="wait"><span class="big">📷</span>拍一拍<small>只拍目标动物，别的要忍住</small></button>
+      <button data-go="memory"><span class="big">🧠</span>记一记<small>记住动物出现的顺序</small></button>
+      <button data-go="book"><span class="big">📖</span>我的图鉴<small>已收集 ${state.cards.length} / ${ANIMALS.length}</small></button>
+    </div>
+    <details><summary>给家长的说明</summary>
+      <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
+      <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
+    </details>`;
+  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, book })[b.dataset.go]());
+}
+
+function book() {
+  reset();
+  app.innerHTML = `<p class="hint">📖 我的图鉴（${state.cards.length} / ${ANIMALS.length}）</p>` +
+    ANIMALS.map(a => state.cards.includes(a.id) ? cardHtml(a)
+      : `<div class="card locked"><div class="pic">❓</div><h3>还没发现</h3><p>完成一轮观察来解锁</p></div>`).join('');
+}
+
+function finish(summary) {
+  reset();
+  state.log[today()] = (state.log[today()] || 0) + 1;
+  const locked = ANIMALS.filter(a => !state.cards.includes(a.id));
+  let reward = '<p class="hint">🏆 你已经集齐了全部卡片，是真正的专家了！</p>';
+  if (locked.length) {
+    const a = sample(locked, 1)[0];
+    state.cards.push(a.id);
+    reward = `<p class="hint">你发现了一张新卡片：</p>${cardHtml(a)}`;
+  }
+  save();
+  beep(880);
+  app.innerHTML = `<p class="hint">🎉 观察完成！${summary}</p>${reward}
+    <p><button class="primary" id="back">回营地</button></p>`;
+  document.getElementById('back').onclick = home;
+}
+
+function playFind() {
+  reset();
+  const levels = [[4, 3, 3], [5, 4, 4], [6, 4, 4], [6, 5, 5], [7, 5, 5]]; // 列, 行, 目标数
+  let round = 0;
+  (function next() {
+    if (round === levels.length) return finish(`你搜索了 ${levels.length} 片草地，观察得很仔细。`);
+    const [cols, rows, nTarget] = levels[round];
+    const [target, ...others] = sample(ANIMALS, 2 + Math.min(round + 2, 5));
+    let cells = Array.from({ length: cols * rows }, (_, i) => i < nTarget ? target : others[Math.floor(Math.random() * others.length)]);
+    cells = shuffle(cells);
+    let left = nTarget;
+    app.innerHTML = `<p class="progress">第 ${round + 1} / ${levels.length} 片草地</p>
+      <p class="hint">找到所有的 <span class="emoji">${target.e}</span> ${target.name}，还有 <b id="left">${left}</b> 只</p>
+      <div class="grid" style="grid-template-columns: repeat(${cols}, 76px)">
+        ${cells.map((a, i) => `<button data-i="${i}" aria-label="${a.name}">${a.e}</button>`).join('')}
+      </div><p class="msg" id="msg"></p>`;
+    const msg = document.getElementById('msg');
+    app.querySelectorAll('.grid button').forEach(b => b.onclick = () => {
+      const a = cells[b.dataset.i];
+      if (a === target) {
+        b.classList.add('found'); b.disabled = true; beep(660);
+        document.getElementById('left').textContent = --left;
+        msg.textContent = '找到了！';
+        if (left === 0) { msg.textContent = '这片草地找完了！'; round++; later(next, 900); }
+      } else {
+        b.classList.add('nope'); later(() => b.classList.remove('nope'), 500);
+        msg.textContent = `这是${a.name}，再找找${target.name}。`;
+      }
+    });
+  })();
+}
+
+function playWait() {
+  reset();
+  const TRIALS = 16, SHOW_MS = 1500, GAP_MS = 800;
+  const [target, ...others] = sample(ANIMALS, 4);
+  const seq = shuffle(Array.from({ length: TRIALS }, (_, i) => i < 11 ? target : others[i % others.length]));
+  let i = -1, current = null, answered = true, hits = 0, holds = 0;
+
+  app.innerHTML = `<p class="hint">你是野生动物摄影师。只拍 <span class="emoji">${target.e}</span> ${target.name}！<br>
+      别的动物出现时，忍住不要拍。</p>
+    <p class="progress" id="count">准备好了就开始</p>
+    <div class="stage" id="stage">🌿</div>
+    <p class="msg" id="msg"></p>
+    <p><button class="primary" id="shoot">▶️ 开始</button></p>
+    <p class="progress">也可以按空格键拍照</p>`;
+  const stage = document.getElementById('stage'), msg = document.getElementById('msg'), btn = document.getElementById('shoot');
+
+  function trial() {
+    if (++i === TRIALS) return finish(`你拍到了 ${hits} 张${target.name}，还成功忍住了 ${holds} 次。`);
+    current = seq[i]; answered = false;
+    stage.textContent = current.e; msg.textContent = '';
+    document.getElementById('count').textContent = `第 ${i + 1} / ${TRIALS} 只`;
+    later(() => {
+      if (!answered && current !== target) { holds++; msg.textContent = '👍 忍住了！'; }
+      else if (!answered) msg.textContent = `${target.name}飞走了，没关系。`;
+      answered = true; stage.textContent = '🌿';
+      later(trial, GAP_MS);
+    }, SHOW_MS);
+  }
+  function shoot() {
+    if (answered) return;
+    answered = true;
+    if (current === target) { hits++; msg.textContent = '📸 拍到了！'; beep(660); }
+    else msg.textContent = `这是${current.name}，下次忍住哦。`;
+  }
+  let started = false;
+  btn.onclick = () => { if (!started) { started = true; btn.textContent = '📷 拍照'; btn.onclick = shoot; later(trial, 600); } };
+  keyHandler = e => { if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) btn.onclick(); } };
+  document.addEventListener('keydown', keyHandler);
+}
+
+function playMemory() {
+  reset();
+  const ROUNDS = 5;
+  let round = 0, len = 2, best = 0;
+
+  function next(retrySeq) {
+    if (!retrySeq && round === ROUNDS) return finish(`你最多记住了 ${best} 只动物的顺序。`);
+    const choices = retrySeq ? retrySeq.choices : sample(ANIMALS, 6);
+    const seq = retrySeq ? retrySeq.seq : sample(choices, len);
+    app.innerHTML = `<p class="progress">第 ${round + 1} / ${ROUNDS} 次</p>
+      <p class="hint" id="hint">仔细看，记住 ${seq.length} 只动物出现的顺序</p>
+      <div class="stage" id="stage">🌿</div>
+      <div class="slots" id="slots"></div>
+      <div class="grid" id="choices" style="grid-template-columns: repeat(6, 76px)"></div>
+      <p class="msg" id="msg"></p>`;
+    const stage = document.getElementById('stage'), msg = document.getElementById('msg');
+    seq.forEach((a, k) => {
+      later(() => { stage.textContent = a.e; }, 800 + k * 1200);
+      later(() => { stage.textContent = '🌿'; }, 800 + k * 1200 + 900);
+    });
+    later(() => ask(), 800 + seq.length * 1200);
+
+    function ask() {
+      let pos = 0;
+      document.getElementById('hint').textContent = '按刚才的顺序点出来';
+      const slots = document.getElementById('slots');
+      slots.innerHTML = seq.map(() => '<span></span>').join('');
+      const box = document.getElementById('choices');
+      box.innerHTML = shuffle(choices).map(a => `<button data-id="${a.id}" aria-label="${a.name}">${a.e}</button>`).join('');
+      box.querySelectorAll('button').forEach(b => b.onclick = () => {
+        const a = ANIMALS.find(x => x.id === b.dataset.id);
+        slots.children[pos].textContent = a.e;
+        if (a !== seq[pos]) {
+          box.querySelectorAll('button').forEach(x => x.disabled = true);
+          if (!retrySeq) { msg.textContent = '顺序不太一样，再看一次。'; later(() => next({ seq, choices }), 1500); }
+          else { msg.textContent = '没关系，换一组试试。'; len = Math.max(2, len - 1); round++; later(() => next(), 1500); }
+          return;
+        }
+        beep(660);
+        if (++pos === seq.length) {
+          box.querySelectorAll('button').forEach(x => x.disabled = true);
+          msg.textContent = '全对！'; best = Math.max(best, seq.length);
+          len = Math.min(6, len + 1); round++; later(() => next(), 1200);
+        }
+      });
+    }
+  }
+  next();
+}
+
+home();
+</script>
+</body>
+</html>
