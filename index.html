@@ -119,6 +119,19 @@
   .verses button small { display: block; font-size: 15px; color: #567; }
   .verses button.now { background: #bfe5b3; border-color: #3f7d4e; }
   @media (max-width: 600px) { .rows { grid-template-columns: repeat(5, 1fr); } }
+  .board {
+    --lines: linear-gradient(#7a5c26, #7a5c26) center / 100% 1px no-repeat, linear-gradient(#7a5c26, #7a5c26) center / 1px 100% no-repeat;
+    display: grid; grid-template-columns: repeat(var(--n), 1fr); width: min(462px, calc(100vw - 24px));
+    margin: 12px auto; padding: 4px; background: #e3c58f; border: 2px solid #a9843f; border-radius: 8px;
+  }
+  .board button, .board button:hover:not(:disabled) { background: var(--lines); }
+  .board button { aspect-ratio: 1; min-width: 0; padding: 0; border: 0; border-radius: 0; position: relative; }
+  .board button.b::after, .board button.w::after { content: ''; position: absolute; inset: 8%; border-radius: 50%; }
+  .board button.b::after { background: #222; }
+  .board button.w::after { background: #fff; border: 1px solid #888; }
+  .board button.last::after { box-shadow: 0 0 0 3px #f0b429; }
+  .board button.win::after { box-shadow: 0 0 0 4px #e0483e; }
+  .controls button.on { background: #3f7d4e; color: #fff; }
   .tile .mini { width: 64px; height: 64px; margin: 0 auto; color: #4a3a1c; }
   @media (max-width: 600px) {
     body { font-size: 18px; }
@@ -365,12 +378,14 @@ function home() {
       <button data-go="math"><span class="big">🧮</span>算一算<small>数数小动物，做加减法</small></button>
       <button data-go="hanzi"><span class="big">🐢</span>甲骨文<small>猜猜古人画的是哪个字</small></button>
       <button data-go="times"><span class="big">✖️</span>乘法口诀<small>听一听，跟着读</small></button>
+      <button data-go="games"><span class="big">🎮</span>小游戏<small>五子棋</small></button>
       <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}，汉字 ${state.hanzi.length} / ${HANZI.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>同一个游戏最多连续玩 ${MAX_STREAK} 轮，之后要先完成一轮别的游戏才能再玩；第二天自动恢复。</p>
       <p>乘法口诀只有朗读和跟读，没有测验：选一个数字，"朗读"会把这一行连着读完，"跟读"每读一句会停 3 秒让孩子跟着读。它不计入每天的轮数，也不解锁卡片。</p>
+      <p>小游戏里目前有五子棋：棋盘是 11 × 11，孩子执黑先下，可以选和电脑下（简单 / 普通）或两个人下。小游戏不计入每天的轮数，不解锁卡片，也没有次数限制。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
@@ -385,6 +400,7 @@ function home() {
     const id = b.dataset.go;
     if (id === 'book') { b.onclick = book; return; }
     if (id === 'times') { b.onclick = playTimes; return; }
+    if (id === 'games') { b.onclick = playGames; return; }
     if (isLocked(id)) {
       b.disabled = true;
       b.querySelector('small').textContent = `已经连玩 ${MAX_STREAK} 次了，先去玩玩别的吧`;
@@ -565,6 +581,94 @@ function playTimes() {
     document.getElementById('follow').onclick = () => play(true);
     document.getElementById('stop').onclick = () => { run++; stopSpeech(); mark(0); msg.textContent = '点一句口诀，可以单独听'; };
   })();
+}
+
+function playGames() {
+  reset();
+  app.innerHTML = `<p class="hint">🎮 小游戏：想玩哪一个？</p>
+    <div class="menu"><button id="gomoku"><span class="big">⚫</span>五子棋<small>先连成五个就赢了</small></button></div>`;
+  document.getElementById('gomoku').onclick = playGomoku;
+}
+
+function playGomoku() {
+  reset();
+  const N = 11, DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  const MODES = { easy: '和电脑下（简单）', normal: '和电脑下（普通）', two: '两个人下' };
+  let mode = MODES[state.gomokuMode] ? state.gomokuMode : 'easy';
+  let board, turn, over, busy, last, winCells;
+  const at = (x, y) => x < 0 || y < 0 || x >= N || y >= N ? -1 : board[y * N + x];
+
+  function winLine(i, p) {
+    const x = i % N, y = Math.floor(i / N);
+    for (const [dx, dy] of DIRS) {
+      const cells = [i];
+      for (const s of [1, -1]) {
+        let cx = x + dx * s, cy = y + dy * s;
+        while (at(cx, cy) === p) { cells.push(cy * N + cx); cx += dx * s; cy += dy * s; }
+      }
+      if (cells.length >= 5) return cells;
+    }
+    return null;
+  }
+  // p 下在 i 这一格有多好：看四个方向能连成几个、两头是否还空着
+  function score(i, p) {
+    const x = i % N, y = Math.floor(i / N);
+    let total = 0;
+    for (const [dx, dy] of DIRS) {
+      let n = 1, open = 0;
+      for (const s of [1, -1]) {
+        let cx = x + dx * s, cy = y + dy * s;
+        while (at(cx, cy) === p) { n++; cx += dx * s; cy += dy * s; }
+        if (at(cx, cy) === 0) open++;
+      }
+      total += n >= 5 ? 100000 : open === 0 ? 0 : n === 4 ? (open === 2 ? 10000 : 1000)
+        : n === 3 ? (open === 2 ? 1000 : 100) : n === 2 ? (open === 2 ? 100 : 10) : open;
+    }
+    return total;
+  }
+  function aiMove() {
+    const moves = [];
+    for (let i = 0; i < N * N; i++) {
+      if (board[i]) continue;
+      const centre = N - Math.abs(i % N - (N - 1) / 2) - Math.abs(Math.floor(i / N) - (N - 1) / 2);
+      moves.push({ i, s: score(i, 2) * 1.1 + score(i, 1) + centre });
+    }
+    moves.sort((a, b) => b.s - a.s);
+    // 简单模式：只有必须赢或必须堵的时候才认真下，其余时候在几步好棋里随便挑
+    if (mode === 'easy' && moves[0].s < 10000) return sample(moves.slice(0, 5), 1)[0].i;
+    return moves[0].i;
+  }
+
+  function paint() {
+    app.querySelectorAll('.board button').forEach((b, i) => {
+      b.className = (board[i] === 1 ? 'b' : board[i] === 2 ? 'w' : '') + (i === last ? ' last' : '') + (winCells && winCells.includes(i) ? ' win' : '');
+    });
+    const msg = document.getElementById('msg'), ai = mode !== 'two';
+    if (winCells) msg.textContent = ai ? (turn === 1 ? '🎉 你赢了！' : '电脑赢了，再来一局吧。') : `🎉 ${turn === 1 ? '黑棋' : '白棋'}赢了！`;
+    else if (over) msg.textContent = '棋盘下满了，平局！';
+    else msg.textContent = ai ? (turn === 1 ? '轮到你了（黑棋）' : '电脑在想…') : `轮到${turn === 1 ? '黑棋' : '白棋'}了`;
+  }
+  function put(i) {
+    board[i] = turn; last = i; beep(turn === 1 ? 520 : 660);
+    winCells = winLine(i, turn);
+    if (winCells || !board.includes(0)) { over = true; return paint(); }
+    turn = 3 - turn; paint();
+    if (mode !== 'two' && turn === 2) { busy = true; later(() => { busy = false; put(aiMove()); }, 500); }
+  }
+  function start() {
+    reset();
+    board = Array(N * N).fill(0); turn = 1; over = false; busy = false; last = -1; winCells = null;
+    app.innerHTML = `<p class="hint">⚫ 五子棋：先把五个棋子连成一条线就赢了</p>
+      <div class="controls">${Object.keys(MODES).map(k => `<button data-mode="${k}"${k === mode ? ' class="on"' : ''}>${MODES[k]}</button>`).join('')}</div>
+      <p class="msg" id="msg"></p>
+      <div class="board" style="--n: ${N}">${board.map((_, i) => `<button aria-label="第${Math.floor(i / N) + 1}行第${i % N + 1}列"></button>`).join('')}</div>
+      <p><button class="primary" id="again">重新开始</button></p>`;
+    app.querySelectorAll('.board button').forEach((b, i) => b.onclick = () => { if (!over && !busy && !board[i]) put(i); });
+    app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; state.gomokuMode = mode; save(); start(); });
+    document.getElementById('again').onclick = start;
+    paint();
+  }
+  start();
 }
 
 function finish(summary) {
