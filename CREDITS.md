@@ -1,6 +1,6 @@
 # 古文字字形来源 / Ancient script glyph credits
 
-`glyphs.js` 中的 40 个字的甲骨文与小篆轮廓，是从下列字体导出并缩放得到的 SVG 路径（经由 MIT 项目 [yigezi](https://github.com/Ivan666jjj/yigezi) 中的字体文件）。
+`glyphs.js` 中的 200 个字的甲骨文与小篆轮廓，是从下列字体导出并缩放得到的 SVG 路径（经由 MIT 项目 [yigezi](https://github.com/Ivan666jjj/yigezi) 中的字体文件）。
 
 - 甲骨文：Oracular 鏡原甲骨文 — Copyright (c) Peichao Qin, 2023 — https://oracular.azurewebsites.net/ — SIL Open Font License 1.1
 - 小篆：开元小篆 — Copyright (c) Kaiyuan Small Seal Font Contributors — https://github.com/frankslin/kaiyuan-small-seal-font — SIL Open Font License 1.1
