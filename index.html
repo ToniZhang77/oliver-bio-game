@@ -27,6 +27,7 @@
   header button:hover:not(:disabled) { background: #356a42; }
   .menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 24px 0; }
   .menu button { padding: 24px 12px; font-size: 22px; }
+  .menu button:disabled { opacity: 0.5; cursor: not-allowed; }
   .menu .big { font-size: 56px; display: block; }
   .menu small { display: block; font-size: 16px; color: #567; }
   .primary { background: #3f7d4e; color: #fff; font-size: 22px; padding: 14px 32px; }
@@ -243,7 +244,10 @@ const today = () => new Date().toLocaleDateString('sv');
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const sample = (a, n) => shuffle(a).slice(0, n);
 
-let state = { cards: [], fruits: [], hanzi: [], log: {}, sound: false };
+let state = { cards: [], fruits: [], hanzi: [], log: {}, sound: false, last: {} };
+const MAX_STREAK = 2;
+let currentGame = null;
+const isLocked = id => state.last.id === id && state.last.n >= MAX_STREAK && state.last.day === today();
 try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) {}
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
 
@@ -341,6 +345,7 @@ function home() {
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
+      <p>同一个游戏最多连续玩 ${MAX_STREAK} 轮，之后要先完成一轮别的游戏才能再玩；第二天自动恢复。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
@@ -350,7 +355,17 @@ function home() {
       <p>水果照片来自 <a href="https://github.com/fruits-360/fruits-360-100x100">Fruits-360 数据集</a>（Mihai Oltean），
         <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 许可。</p>
     </details>`;
-  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, math: playMath, hanzi: playHanzi, book })[b.dataset.go]());
+  const games = { find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, math: playMath, hanzi: playHanzi };
+  app.querySelectorAll('[data-go]').forEach(b => {
+    const id = b.dataset.go;
+    if (id === 'book') { b.onclick = book; return; }
+    if (isLocked(id)) {
+      b.disabled = true;
+      b.querySelector('small').textContent = `已经连玩 ${MAX_STREAK} 次了，先去玩玩别的吧`;
+      return;
+    }
+    b.onclick = () => { currentGame = id; games[id](); };
+  });
 }
 
 function book() {
@@ -489,6 +504,9 @@ function playMath() {
 function finish(summary) {
   reset();
   state.log[today()] = (state.log[today()] || 0) + 1;
+  const same = state.last.id === currentGame && state.last.day === today();
+  state.last = { id: currentGame, n: same ? state.last.n + 1 : 1, day: today() };
+  if (isLocked(currentGame)) summary += `<br>这个游戏已经连玩 ${MAX_STREAK} 次了，接下来换一个玩吧。`;
   const locked = ANIMALS.filter(a => !state.cards.includes(a.id));
   let reward = '<p class="hint">🏆 你已经集齐了全部卡片，是真正的专家了！</p>';
   if (locked.length) {
