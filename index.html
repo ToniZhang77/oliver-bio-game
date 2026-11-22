@@ -109,6 +109,16 @@
   .evo figcaption { font-size: 15px; color: #567; line-height: 1.3; margin-top: 4px; }
   .evo .arrow { font-size: 24px; color: #8fb284; animation: hop-in 0.6s ease-out both; }
   @media (prefers-reduced-motion: reduce) { .evo figure, .evo .arrow { animation: none; } }
+  .rows { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; max-width: 520px; margin: 12px auto; }
+  .rows button { padding: 8px 0; font-size: 24px; }
+  .rows button.on { background: #3f7d4e; color: #fff; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .controls button { padding: 10px 18px; font-size: 20px; }
+  .verses { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-width: 520px; margin: 12px auto; }
+  .verses button { font-size: 26px; padding: 10px 4px; }
+  .verses button small { display: block; font-size: 15px; color: #567; }
+  .verses button.now { background: #bfe5b3; border-color: #3f7d4e; }
+  @media (max-width: 600px) { .rows { grid-template-columns: repeat(5, 1fr); } }
   .tile .mini { width: 64px; height: 64px; margin: 0 auto; color: #4a3a1c; }
   @media (max-width: 600px) {
     body { font-size: 18px; }
@@ -253,10 +263,11 @@ try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
 if (!state.soundChosen) state.sound = true;
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
 
-let timers = [], keyHandler = null;
+let timers = [], keyHandler = null, playSession = 0;
 const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; };
 function reset() {
   timers.forEach(clearTimeout); timers = [];
+  playSession++; stopSpeech();
   if (keyHandler) { document.removeEventListener('keydown', keyHandler); keyHandler = null; }
 }
 
@@ -291,13 +302,23 @@ function showSpeechNote(lang) {
   const el = document.getElementById('speechNote');
   if (el) el.textContent = speechProblem(lang);
 }
-function speak(text, lang = 'en-US') {
-  if (!state.sound || !canSpeak) return showSpeechNote(lang);
+function stopSpeech() {
+  try { if (canSpeak && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel(); } catch (e) {}
+}
+// onend：读完（或读不了）之后调用一次；离开当前页面后不再调用
+function speak(text, lang = 'en-US', onend) {
+  const session = playSession;
+  let ended = false;
+  const end = () => { if (ended || session !== playSession) return; ended = true; if (onend) onend(); };
+  if (!state.sound || !canSpeak) { showSpeechNote(lang); if (onend) later(end, 1200); return; }
   try {
     const u = new SpeechSynthesisUtterance(text), v = pickVoice(lang);
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = lang;
     u.rate = 0.85; u.volume = 1;
+    u.onend = end;
+    if (onend) later(end, 8000);
     u.onerror = e => {
+      end();
       if (e.error === 'interrupted' || e.error === 'canceled') return;
       speechError = `朗读失败（${e.error || '未知原因'}）。`; showSpeechNote(lang);
     };
@@ -309,7 +330,7 @@ function speak(text, lang = 'en-US') {
     } else {
       speechSynthesis.speak(u);
     }
-  } catch (e) { speechError = '朗读失败。'; }
+  } catch (e) { speechError = '朗读失败。'; if (onend) later(end, 1200); }
   showSpeechNote(lang);
 }
 
@@ -343,11 +364,13 @@ function home() {
       <button data-go="fruit"><span class="big">🍎</span>认水果<small>看图片，选出英语名字</small></button>
       <button data-go="math"><span class="big">🧮</span>算一算<small>数数小动物，做加减法</small></button>
       <button data-go="hanzi"><span class="big">🐢</span>甲骨文<small>猜猜古人画的是哪个字</small></button>
+      <button data-go="times"><span class="big">✖️</span>乘法口诀<small>听一听，跟着读</small></button>
       <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}，汉字 ${state.hanzi.length} / ${HANZI.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>同一个游戏最多连续玩 ${MAX_STREAK} 轮，之后要先完成一轮别的游戏才能再玩；第二天自动恢复。</p>
+      <p>乘法口诀只有朗读和跟读，没有测验：选一个数字，"朗读"会把这一行连着读完，"跟读"每读一句会停 3 秒让孩子跟着读。它不计入每天的轮数，也不解锁卡片。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
@@ -361,6 +384,7 @@ function home() {
   app.querySelectorAll('[data-go]').forEach(b => {
     const id = b.dataset.go;
     if (id === 'book') { b.onclick = book; return; }
+    if (id === 'times') { b.onclick = playTimes; return; }
     if (isLocked(id)) {
       b.disabled = true;
       b.querySelector('small').textContent = `已经连玩 ${MAX_STREAK} 次了，先去玩玩别的吧`;
@@ -500,6 +524,46 @@ function playMath() {
       if (tries === 0) firstTry++;
       i++; later(next, 1500);
     });
+  })();
+}
+
+function playTimes() {
+  reset();
+  const ZH = '零一二三四五六七八九', FOLLOW_MS = 3000;
+  const cn = p => p < 10 ? ZH[p] : p === 10 ? '一十' : (p < 20 ? '' : ZH[Math.floor(p / 10)]) + '十' + (p % 10 ? ZH[p % 10] : '');
+  const verse = (i, n) => ZH[i] + ZH[n] + (i * n < 10 ? '得' : '') + cn(i * n);
+  let row = state.timesRow || 1, run = 0;
+  (function draw() {
+    run++; stopSpeech();
+    app.innerHTML = `<p class="hint">✖️ 乘法口诀：选一个数字，听一听，跟着读</p>
+      <div class="rows">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-n="${n}"${n === row ? ' class="on"' : ''}>${n}</button>`).join('')}</div>
+      <div class="controls"><button class="primary" id="readAll">🔊 朗读</button><button class="primary" id="follow">🎤 跟读</button><button id="stop">⏹ 停止</button></div>
+      <p class="msg" id="msg">点一句口诀，可以单独听</p>
+      <div class="verses">${Array.from({ length: row }, (_, k) => `<button data-i="${k + 1}">${verse(k + 1, row)}<small>${k + 1} × ${row} = ${(k + 1) * row}</small></button>`).join('')}</div>
+      <p class="progress" id="speechNote"></p>`;
+    const msg = document.getElementById('msg');
+    const tiles = [...app.querySelectorAll('.verses button')];
+    const mark = i => tiles.forEach(t => t.classList.toggle('now', +t.dataset.i === i));
+    function play(follow) {
+      const my = ++run;
+      let i = 1;
+      (function step() {
+        if (my !== run) return;
+        if (i > row) { mark(0); msg.textContent = follow ? '跟读完成，真棒！' : '读完了！'; return; }
+        const v = verse(i, row);
+        mark(i); msg.textContent = v;
+        speak(v, 'zh-CN', () => {
+          if (my !== run) return;
+          if (follow) msg.textContent = `轮到你了，大声读：${v}`;
+          later(() => { i++; step(); }, follow ? FOLLOW_MS : 400);
+        });
+      })();
+    }
+    app.querySelectorAll('.rows button').forEach(b => b.onclick = () => { row = +b.dataset.n; state.timesRow = row; save(); draw(); });
+    tiles.forEach(t => t.onclick = () => { run++; const i = +t.dataset.i; mark(i); msg.textContent = verse(i, row); speak(verse(i, row), 'zh-CN'); });
+    document.getElementById('readAll').onclick = () => play(false);
+    document.getElementById('follow').onclick = () => play(true);
+    document.getElementById('stop').onclick = () => { run++; stopSpeech(); mark(0); msg.textContent = '点一句口诀，可以单独听'; };
   })();
 }
 
