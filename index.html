@@ -266,21 +266,53 @@ function beep(freq) {
   } catch (e) {}
 }
 
-function speak(text, lang = 'en-US', times = 1) {
-  if (!state.sound) return;
+const canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+let voices = [], lastUtter = null, speechError = '';
+const loadVoices = () => { try { voices = speechSynthesis.getVoices() || []; } catch (e) {} };
+if (canSpeak) { loadVoices(); try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch (e) {} }
+function pickVoice(lang) {
+  const norm = v => v.lang.replace('_', '-').toLowerCase(), want = lang.toLowerCase(), pre = want.slice(0, 2);
+  const same = voices.filter(v => norm(v).startsWith(pre) || (pre === 'zh' && norm(v).startsWith('cmn')));
+  return same.find(v => norm(v) === want) || same.find(v => !/hk|yue|tw/.test(norm(v))) || same[0];
+}
+function speechProblem(lang) {
+  if (!state.sound) return '';
+  if (!canSpeak) return '这个浏览器不支持朗读，请换用手机自带浏览器或 Chrome 打开。';
+  if (voices.length && !pickVoice(lang)) return '这台设备没有安装中文语音，所以不能朗读。';
+  return speechError;
+}
+function showSpeechNote(lang) {
+  const el = document.getElementById('speechNote');
+  if (el) el.textContent = speechProblem(lang);
+}
+function speak(text, lang = 'en-US') {
+  if (!state.sound || !canSpeak) return showSpeechNote(lang);
   try {
-    speechSynthesis.cancel();
-    for (let n = 0; n < times; n++) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = lang; u.rate = 0.85;
+    const u = new SpeechSynthesisUtterance(text), v = pickVoice(lang);
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = lang;
+    u.rate = 0.85; u.volume = 1;
+    u.onerror = e => {
+      if (e.error === 'interrupted' || e.error === 'canceled') return;
+      speechError = `朗读失败（${e.error || '未知原因'}）。`; showSpeechNote(lang);
+    };
+    lastUtter = u;
+    // 手机浏览器上 cancel() 后立刻 speak() 会被吞掉，所以只在正在朗读时才取消并稍等一下
+    if (speechSynthesis.speaking || speechSynthesis.pending) {
+      speechSynthesis.cancel();
+      setTimeout(() => speechSynthesis.speak(u), 150);
+    } else {
       speechSynthesis.speak(u);
     }
-  } catch (e) {}
+  } catch (e) { speechError = '朗读失败。'; }
+  showSpeechNote(lang);
 }
 
 const soundBtn = document.getElementById('soundBtn');
 const paintSound = () => { soundBtn.textContent = state.sound ? '🔊 声音：开' : '🔇 声音：关'; };
-soundBtn.onclick = () => { state.sound = !state.sound; save(); paintSound(); beep(660); };
+soundBtn.onclick = () => {
+  state.sound = !state.sound; save(); paintSound();
+  if (state.sound) speak('声音已打开', 'zh-CN'); else if (canSpeak) speechSynthesis.cancel();
+};
 document.getElementById('homeBtn').onclick = () => home();
 paintSound();
 
@@ -348,14 +380,14 @@ function playHanzi() {
       <div id="top"><div class="bone">${glyphSvg(h.zi, 0)}</div>
       <p class="hint">三千多年前的人这样写字。猜猜这是哪个字？</p></div>
       <div class="options nums hanzi">${options.map((o, k) => `<button data-k="${k}">${o.zi}</button>`).join('')}</div>
-      <p class="msg" id="msg"></p>`;
+      <p class="msg" id="msg"></p><p class="progress" id="speechNote"></p>`;
     const msg = document.getElementById('msg');
     const buttons = app.querySelectorAll('.options button');
     buttons.forEach(b => b.onclick = () => {
       if (options[b.dataset.k] !== h) {
         tries++; b.disabled = true; b.classList.add('nope');
         msg.textContent = state.sound ? '不是这个。听一听，再看看它像什么。' : '不是这个，再看看它像什么。（打开声音可以听提示）';
-        speak(h.zi, 'zh-CN', 2);
+        speak(`${h.zi}，${h.zi}`, 'zh-CN');
         return;
       }
       buttons.forEach(x => x.disabled = true);
