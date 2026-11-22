@@ -91,6 +91,24 @@
   .equation { font-size: min(44px, 11vw); font-weight: bold; margin: 8px 0; }
   .options.nums { grid-template-columns: repeat(4, 1fr); }
   .options.nums button { font-size: 30px; padding: 12px 0; }
+  .options.hanzi button { font-size: 34px; padding: 8px 0; }
+  .glyph { width: 100%; height: 100%; fill: currentColor; display: block; }
+  .bone {
+    width: min(220px, 60vw); height: min(220px, 60vw); margin: 0 auto; padding: 16px;
+    background: #f4ead2; border: 2px solid #c9b88a; border-radius: 20px; color: #4a3a1c;
+  }
+  .evo { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 12px 0; }
+  .evo figure { margin: 0; animation: hop-in 0.6s ease-out both; }
+  .evo .box {
+    width: min(120px, 24vw); height: min(120px, 24vw); padding: 8px; border-radius: 14px;
+    background: #fff; border: 2px solid #b9d3b0; display: flex; align-items: center; justify-content: center;
+    font-size: min(84px, 17vw); line-height: 1; font-family: "KaiTi", "STKaiti", "Kaiti SC", serif;
+  }
+  .evo .box.old { background: #f4ead2; border-color: #c9b88a; color: #4a3a1c; }
+  .evo figcaption { font-size: 15px; color: #567; line-height: 1.3; margin-top: 4px; }
+  .evo .arrow { font-size: 24px; color: #8fb284; animation: hop-in 0.6s ease-out both; }
+  @media (prefers-reduced-motion: reduce) { .evo figure, .evo .arrow { animation: none; } }
+  .tile .mini { width: 64px; height: 64px; margin: 0 auto; color: #4a3a1c; }
   @media (max-width: 600px) {
     body { font-size: 18px; }
     header { padding: 8px 12px; }
@@ -118,6 +136,7 @@
 </header>
 <main id="app"></main>
 
+<script src="glyphs.js"></script>
 <script>
 const ANIMALS = [
   { id: 'bee', e: '🐝', name: '蜜蜂', eats: '花蜜和花粉', lives: '蜂巢', fact: '会用"跳舞"告诉同伴花在哪里。' },
@@ -152,6 +171,16 @@ const FRUITS = `apple 苹果 apple|green-apple 青苹果 green apple|apricot 杏
 const FRUIT_QUIZ = 8;
 const MATH_QUIZ = 8;
 const DAILY_ROUNDS = 3;
+const HANZI = `日 圆圆的太阳|月 弯弯的月牙|山 连在一起的三座山峰|水 弯弯曲曲流动的河水|火 向上跳动的火苗|木 一棵树，上面是树枝，下面是树根
+|人 侧着身子站立的人|口 张开的嘴巴|目 一只横着的眼睛|耳 一只耳朵|心 心脏的样子|牛 牛的头，两只角向上弯|羊 羊的头，两只角向下弯
+|马 一匹马，有长长的脸和鬃毛|鸟 一只侧面的鸟|鱼 一条鱼，有头、身子和尾巴|龟 一只乌龟，背上有壳|虎 张着大嘴、身上有花纹的老虎
+|鹿 头上长着大角的鹿|象 有长鼻子的大象|犬 尾巴向上翘的狗|雨 从天上落下来的雨点|云 天上卷卷的云|田 分成一块一块的田地
+|禾 穗子弯下来的庄稼|米 一粒一粒的米|门 两扇对开的门|车 有两个轮子的车|舟 一条小木船|刀 一把刀|弓 一张射箭用的弓
+|大 张开手脚站着的人|小 几个小小的点|上 长线的上面有一条短线|下 长线的下面有一条短线|中 一根杆子穿过正中间
+|天 一个人，特别画出了大大的头|子 小孩的大脑袋，头上有几根头发|女 双手交叉、跪坐着的人|母 在"女"字上加了两点，表示妈妈`
+  .split('|').map(s => { const [zi, hint] = s.trim().split(' '); return { zi, hint }; });
+const HANZI_QUIZ = 6;
+const glyphSvg = (zi, k) => `<svg class="glyph" viewBox="0 0 100 100" role="img" aria-label="${k ? '小篆' : '甲骨文'}"><path d="${GLYPHS[zi][k]}"/></svg>`;
 const STORE_KEY = 'oliver-bio-station';
 
 const app = document.getElementById('app');
@@ -159,7 +188,7 @@ const today = () => new Date().toLocaleDateString('sv');
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const sample = (a, n) => shuffle(a).slice(0, n);
 
-let state = { cards: [], fruits: [], log: {}, sound: false };
+let state = { cards: [], fruits: [], hanzi: [], log: {}, sound: false };
 try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) {}
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
 
@@ -217,17 +246,21 @@ function home() {
       <button data-go="memory"><span class="big">🧠</span>记一记<small>记住动物出现的顺序</small></button>
       <button data-go="fruit"><span class="big">🍎</span>认水果<small>看图片，选出英语名字</small></button>
       <button data-go="math"><span class="big">🧮</span>算一算<small>数数小动物，做加减法</small></button>
-      <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}</small></button>
+      <button data-go="hanzi"><span class="big">🐢</span>甲骨文<small>猜猜古人画的是哪个字</small></button>
+      <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}，汉字 ${state.hanzi.length} / ${HANZI.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
+      <p>甲骨文每轮 ${HANZI_QUIZ} 个字，共 ${HANZI.length} 个象形字。先看甲骨文猜字，选对后展示"甲骨文 → 小篆 → 今天"的演变。字形说明是给孩子的简化讲法，个别字的本义学界有不同看法。</p>
+      <p>甲骨文字形来自 Oracular 鏡原甲骨文字体（Peichao Qin），小篆字形来自开元小篆与全字库说文解字，均有开放授权，详见
+        <a href="https://github.com/ToniZhang77/oliver-bio-game/blob/main/CREDITS.md">CREDITS.md</a>。</p>
       <p>水果照片来自 <a href="https://github.com/fruits-360/fruits-360-100x100">Fruits-360 数据集</a>（Mihai Oltean），
         <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 许可。</p>
     </details>`;
-  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, math: playMath, book })[b.dataset.go]());
+  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ({ find: playFind, wait: playWait, memory: playMemory, fruit: playFruit, math: playMath, hanzi: playHanzi, book })[b.dataset.go]());
 }
 
 function book() {
@@ -237,7 +270,51 @@ function book() {
       : `<div class="card locked"><div class="pic">❓</div><h3>还没发现</h3><p>完成一轮观察来解锁</p></div>`).join('') +
     `<p class="hint">🍎 水果图鉴（${state.fruits.length} / ${FRUITS.length}）</p><div class="tiles">` +
     FRUITS.map(f => { const known = state.fruits.includes(f.id); return `<div class="tile${known ? ' known' : ''}">
-      <img src="fruits/${f.id}.jpg" alt="${f.zh}" loading="lazy"><div>${f.zh}</div><small>${known ? f.en : '？？？'}</small></div>`; }).join('') + '</div>';
+      <img src="fruits/${f.id}.jpg" alt="${f.zh}" loading="lazy"><div>${f.zh}</div><small>${known ? f.en : '？？？'}</small></div>`; }).join('') + '</div>' +
+    `<p class="hint">🐢 汉字图鉴（${state.hanzi.length} / ${HANZI.length}）</p><div class="tiles">` +
+    HANZI.map(h => { const known = state.hanzi.includes(h.zi); return `<div class="tile${known ? ' known' : ''}">
+      <div class="mini">${glyphSvg(h.zi, 0)}</div><div>${known ? h.zi : '？'}</div></div>`; }).join('') + '</div>';
+}
+
+function playHanzi() {
+  reset();
+  const known = h => state.hanzi.includes(h.zi);
+  const quiz = shuffle(HANZI.filter(h => !known(h))).concat(shuffle(HANZI.filter(known))).slice(0, HANZI_QUIZ);
+  let i = 0, firstTry = 0;
+  (function next() {
+    if (i === quiz.length) return finish(`你认了 ${quiz.length} 个甲骨文，其中 ${firstTry} 个一次就猜对了。`);
+    const h = quiz[i];
+    const options = shuffle([h, ...sample(HANZI.filter(x => x !== h), 3)]);
+    let tries = 0;
+    app.innerHTML = `<p class="progress">第 ${i + 1} / ${quiz.length} 个字</p>
+      <div id="top"><div class="bone">${glyphSvg(h.zi, 0)}</div>
+      <p class="hint">三千多年前的人这样写字。猜猜这是哪个字？</p></div>
+      <div class="options nums hanzi">${options.map((o, k) => `<button data-k="${k}">${o.zi}</button>`).join('')}</div>
+      <p class="msg" id="msg"></p>`;
+    const msg = document.getElementById('msg');
+    const buttons = app.querySelectorAll('.options button');
+    buttons.forEach(b => b.onclick = () => {
+      if (options[b.dataset.k] !== h) {
+        tries++; b.disabled = true; b.classList.add('nope');
+        msg.textContent = '不是这个，再看看它像什么。';
+        return;
+      }
+      buttons.forEach(x => x.disabled = true);
+      b.classList.add('found');
+      beep(660);
+      if (tries === 0) { firstTry++; if (!known(h)) { state.hanzi.push(h.zi); save(); } }
+      document.getElementById('top').innerHTML = `<p class="hint">对了，是"${h.zi}"！看看它是怎么变的：</p>
+        <div class="evo">
+          <figure><div class="box old">${glyphSvg(h.zi, 0)}</div><figcaption>甲骨文<br>约 3300 年前</figcaption></figure>
+          <span class="arrow" style="animation-delay: 0.5s">➜</span>
+          <figure style="animation-delay: 0.9s"><div class="box old">${glyphSvg(h.zi, 1)}</div><figcaption>小篆<br>约 2200 年前</figcaption></figure>
+          <span class="arrow" style="animation-delay: 1.4s">➜</span>
+          <figure style="animation-delay: 1.8s"><div class="box">${h.zi}</div><figcaption>今天<br>我们写的字</figcaption></figure>
+        </div>`;
+      msg.innerHTML = `甲骨文画的是：${h.hint}。<br><button class="primary" id="go">${i + 1 === quiz.length ? '完成' : '下一个字'}</button>`;
+      document.getElementById('go').onclick = () => { i++; next(); };
+    });
+  })();
 }
 
 function playFruit() {
