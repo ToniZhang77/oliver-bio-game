@@ -132,6 +132,10 @@
   .board button.last::after { box-shadow: 0 0 0 3px #f0b429; }
   .board button.win::after { box-shadow: 0 0 0 4px #e0483e; }
   .controls button.on { background: #3f7d4e; color: #fff; }
+  .arcade {
+    display: block; width: min(420px, calc(100vw - 24px)); aspect-ratio: 3 / 4; margin: 8px auto;
+    border-radius: 12px; background: #12223a; touch-action: none;
+  }
   .tile .mini { width: 64px; height: 64px; margin: 0 auto; color: #4a3a1c; }
   @media (max-width: 600px) {
     body { font-size: 18px; }
@@ -276,11 +280,12 @@ try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
 if (!state.soundChosen) state.sound = true;
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
 
-let timers = [], keyHandler = null, playSession = 0;
+let timers = [], keyHandler = null, playSession = 0, cleanups = [];
 const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; };
 function reset() {
   timers.forEach(clearTimeout); timers = [];
   playSession++; stopSpeech();
+  cleanups.forEach(f => f()); cleanups = [];
   if (keyHandler) { document.removeEventListener('keydown', keyHandler); keyHandler = null; }
 }
 
@@ -378,14 +383,14 @@ function home() {
       <button data-go="math"><span class="big">🧮</span>算一算<small>数数小动物，做加减法</small></button>
       <button data-go="hanzi"><span class="big">🐢</span>甲骨文<small>猜猜古人画的是哪个字</small></button>
       <button data-go="times"><span class="big">✖️</span>乘法口诀<small>听一听，跟着读</small></button>
-      <button data-go="games"><span class="big">🎮</span>小游戏<small>五子棋</small></button>
+      <button data-go="games"><span class="big">🎮</span>小游戏<small>五子棋、小蜜蜂</small></button>
       <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}，汉字 ${state.hanzi.length} / ${HANZI.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>同一个游戏最多连续玩 ${MAX_STREAK} 轮，之后要先完成一轮别的游戏才能再玩；第二天自动恢复。</p>
       <p>乘法口诀只有朗读和跟读，没有测验：选一个数字，"朗读"会把这一行连着读完，"跟读"每读一句会停 3 秒让孩子跟着读。它不计入每天的轮数，也不解锁卡片。</p>
-      <p>小游戏里目前有五子棋：棋盘是 11 × 11，孩子执黑先下，可以选和电脑下（简单 / 普通）或两个人下。小游戏不计入每天的轮数，不解锁卡片，也没有次数限制。</p>
+      <p>小游戏里有五子棋和小蜜蜂。五子棋：棋盘是 11 × 11，孩子执黑先下，可以选和电脑下（简单 / 普通）或两个人下。小蜜蜂：左右移动飞船打蜜蜂，飞船自动发射，有 3 条命，一关比一关快。小游戏不计入每天的轮数，不解锁卡片，也没有次数限制。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
@@ -586,8 +591,134 @@ function playTimes() {
 function playGames() {
   reset();
   app.innerHTML = `<p class="hint">🎮 小游戏：想玩哪一个？</p>
-    <div class="menu"><button id="gomoku"><span class="big">⚫</span>五子棋<small>先连成五个就赢了</small></button></div>`;
+    <div class="menu"><button id="gomoku"><span class="big">⚫</span>五子棋<small>先连成五个就赢了</small></button>
+      <button id="bees"><span class="big">🐝</span>小蜜蜂<small>开飞船，打蜜蜂</small></button></div>`;
   document.getElementById('gomoku').onclick = playGomoku;
+  document.getElementById('bees').onclick = playBees;
+}
+
+function playBees() {
+  reset();
+  const session = playSession, W = 360, H = 480, PY = 440, COLS = 7, ROWS = 4;
+  app.innerHTML = `<p class="hint">🐝 小蜜蜂：左右移动飞船，把蜜蜂都打下来</p>
+    <p class="progress" id="hud"></p>
+    <canvas class="arcade" id="arcade"></canvas>
+    <p class="msg" id="msg"></p>
+    <div class="controls"><button id="pause">⏸ 暂停</button><button class="primary" id="again">重新开始</button></div>
+    <p class="progress">手机：手指在画面上左右滑动。电脑：按 ← → 键。飞船会自动发射。</p>`;
+  const canvas = document.getElementById('arcade'), ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud'), msg = document.getElementById('msg');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * dpr; canvas.height = H * dpr; ctx.scale(dpr, dpr);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const stars = Array.from({ length: 40 }, () => [Math.random() * W, Math.random() * H]);
+
+  let px = W / 2, pointerX = null, keys = {}, paused = false, over = false;
+  let score = 0, lives = 3, level = 1, invuln = 0, cool = 0, banner = 0, diveTimer = 0, fx = 0, dir = 1;
+  let enemies = [], shots = [], bombs = [], hudText = '';
+  const slotX = e => W / 2 + (e.c - (COLS - 1) / 2) * 40 + fx, slotY = e => 56 + e.r * 34;
+  const near = (a, b, d) => Math.hypot(a.x - b.x, a.y - b.y) < d;
+
+  function newLevel() {
+    enemies = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) enemies.push({ r, c, x: 0, y: 0, mode: 'form', t: 0, dropped: false });
+    enemies.forEach(e => { e.x = slotX(e); e.y = slotY(e); });
+    shots = []; bombs = []; banner = 1.5; diveTimer = 1;
+  }
+  function hit() {
+    lives--; invuln = 1.5; bombs = []; beep(200);
+    if (lives > 0) return;
+    over = true;
+    const best = score > (state.beeBest || 0);
+    if (best) { state.beeBest = score; save(); }
+    msg.textContent = `游戏结束！你得了 ${score} 分${best ? '，是新的最高分！' : '。'}`;
+  }
+  function update(dt) {
+    banner -= dt; invuln -= dt; cool -= dt;
+    if (keys.left) px -= 220 * dt;
+    if (keys.right) px += 220 * dt;
+    if (pointerX !== null) px += Math.max(-400 * dt, Math.min(400 * dt, pointerX - px));
+    px = Math.max(18, Math.min(W - 18, px));
+    if (cool <= 0 && shots.length < 2 && banner <= 0) { shots.push({ x: px, y: PY - 18 }); cool = 0.35; }
+    shots.forEach(s => { s.y -= 420 * dt; });
+    shots = shots.filter(s => s.y > -10);
+
+    fx += dir * (24 + level * 6) * dt;
+    if (fx > 40) dir = -1; else if (fx < -40) dir = 1;
+    diveTimer -= dt;
+    const divers = enemies.filter(e => e.mode !== 'form').length;
+    if (diveTimer <= 0 && banner <= 0 && divers < Math.min(4, 1 + Math.floor(level / 2))) {
+      const pool = enemies.filter(e => e.mode === 'form');
+      if (pool.length) { const e = sample(pool, 1)[0]; e.mode = 'dive'; e.t = 0; e.dropped = false; }
+      diveTimer = Math.max(0.8, 2.6 - level * 0.25);
+    }
+    for (const e of enemies) {
+      if (e.mode === 'form') { e.x = slotX(e); e.y = slotY(e); continue; }
+      if (e.mode === 'dive') {
+        e.t += dt; e.y += (100 + level * 12) * dt;
+        e.x = Math.max(14, Math.min(W - 14, e.x + (Math.sign(px - e.x) * 45 + Math.sin(e.t * 4) * 90) * dt));
+        if (!e.dropped && e.y > 200) { e.dropped = true; if (Math.random() < Math.min(0.8, 0.2 + level * 0.1)) bombs.push({ x: e.x, y: e.y + 10 }); }
+        if (e.y > H + 20) { e.mode = 'return'; e.y = -20; }
+      } else {
+        const dx = slotX(e) - e.x, dy = slotY(e) - e.y, d = Math.hypot(dx, dy);
+        if (d < 4) e.mode = 'form'; else { e.x += dx / d * 160 * dt; e.y += dy / d * 160 * dt; }
+      }
+    }
+    bombs.forEach(b => { b.y += (140 + level * 10) * dt; });
+    bombs = bombs.filter(b => b.y < H + 10);
+
+    for (const s of shots) {
+      const e = enemies.find(e => !e.dead && near(e, s, 16));
+      if (!e) continue;
+      s.y = -99; e.dead = true; beep(700);
+      score += (e.r === 0 ? 30 : 10) * (e.mode === 'form' ? 1 : 2);
+    }
+    const me = { x: px, y: PY };
+    if (invuln <= 0) {
+      const e = enemies.find(e => !e.dead && e.mode !== 'form' && near(e, me, 20));
+      if (e) { e.dead = true; hit(); } else if (bombs.some(b => near(b, me, 13))) hit();
+    }
+    enemies = enemies.filter(e => !e.dead);
+    if (!enemies.length && !over) { level++; newLevel(); }
+  }
+  function draw() {
+    ctx.fillStyle = '#12223a'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#7f93b5'; stars.forEach(([x, y]) => ctx.fillRect(x, y, 1.5, 1.5));
+    ctx.font = '24px sans-serif';
+    enemies.forEach(e => ctx.fillText(e.r === 0 ? '🦋' : '🐝', e.x, e.y));
+    ctx.fillStyle = '#ffe066'; shots.forEach(s => ctx.fillRect(s.x - 2, s.y - 7, 4, 14));
+    ctx.fillStyle = '#ff9f43'; bombs.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, 7); ctx.fill(); });
+    ctx.save(); ctx.translate(px, PY); ctx.rotate(-Math.PI / 4); ctx.globalAlpha = invuln > 0 ? 0.45 : 1;
+    ctx.font = '30px sans-serif'; ctx.fillText('🚀', 0, 0); ctx.restore();
+    const text = over ? '游戏结束' : paused ? '暂停' : banner > 0 ? `第 ${level} 关` : '';
+    if (text) { ctx.fillStyle = '#fff'; ctx.font = 'bold 32px sans-serif'; ctx.fillText(text, W / 2, H / 2); }
+    const h = `分数 ${score}　最高 ${Math.max(score, state.beeBest || 0)}　第 ${level} 关　${'❤️'.repeat(Math.max(0, lives))}`;
+    if (h !== hudText) hud.textContent = hudText = h;
+  }
+  let prev = performance.now();
+  (function frame(now) {
+    if (session !== playSession) return;
+    const dt = Math.min((now - prev) / 1000, 0.05); prev = now;
+    if (!paused && !over && dt > 0) update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  })(prev);
+
+  const toX = e => { const r = canvas.getBoundingClientRect(); return (e.clientX - r.left) / r.width * W; };
+  canvas.onpointerdown = canvas.onpointermove = e => { pointerX = toX(e); };
+  canvas.onpointerup = e => { if (e.pointerType !== 'mouse') pointerX = null; };
+  canvas.onpointerleave = canvas.onpointercancel = () => { pointerX = null; };
+  const onKey = e => {
+    const k = { ArrowLeft: 'left', ArrowRight: 'right', KeyA: 'left', KeyD: 'right' }[e.code];
+    if (!k) return;
+    e.preventDefault(); keys[k] = e.type === 'keydown';
+  };
+  document.addEventListener('keydown', onKey); document.addEventListener('keyup', onKey);
+  cleanups.push(() => { document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKey); });
+  const pauseBtn = document.getElementById('pause');
+  pauseBtn.onclick = () => { if (over) return; paused = !paused; pauseBtn.textContent = paused ? '▶️ 继续' : '⏸ 暂停'; };
+  document.getElementById('again').onclick = playBees;
+  newLevel();
 }
 
 function playGomoku() {
