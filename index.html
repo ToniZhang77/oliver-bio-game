@@ -383,14 +383,14 @@ function home() {
       <button data-go="math"><span class="big">🧮</span>算一算<small>数数小动物，做加减法</small></button>
       <button data-go="hanzi"><span class="big">🐢</span>甲骨文<small>猜猜古人画的是哪个字</small></button>
       <button data-go="times"><span class="big">✖️</span>乘法口诀<small>听一听，跟着读</small></button>
-      <button data-go="games"><span class="big">🎮</span>小游戏<small>五子棋、小蜜蜂</small></button>
+      <button data-go="games"><span class="big">🎮</span>小游戏<small>五子棋、小蜜蜂、躲子弹</small></button>
       <button data-go="book"><span class="big">📖</span>我的图鉴<small>动物 ${state.cards.length} / ${ANIMALS.length}，水果 ${state.fruits.length} / ${FRUITS.length}，汉字 ${state.hanzi.length} / ${HANZI.length}</small></button>
     </div>
     <details><summary>给家长的说明</summary>
       <p>每轮约 2–3 分钟，建议每天 ${DAILY_ROUNDS} 轮。点错不扣分、不计时，每完成一轮就解锁一张卡片，奖励的是"做完"，不是"做对"。</p>
       <p>同一个游戏最多连续玩 ${MAX_STREAK} 轮，之后要先完成一轮别的游戏才能再玩；第二天自动恢复。</p>
       <p>乘法口诀只有朗读和跟读，没有测验：选一个数字，"朗读"会把这一行连着读完，"跟读"每读一句会停 3 秒让孩子跟着读。它不计入每天的轮数，也不解锁卡片。</p>
-      <p>小游戏里有五子棋和小蜜蜂。五子棋：棋盘是 11 × 11，孩子执黑先下，可以选和电脑下（简单 / 普通）或两个人下。小蜜蜂：左右移动飞船打蜜蜂，飞船自动发射，有 3 条命，一关比一关快。小游戏不计入每天的轮数，不解锁卡片，也没有次数限制。</p>
+      <p>小游戏里有五子棋、小蜜蜂和是男人就撑过30秒。五子棋：棋盘是 11 × 11，孩子执黑先下，可以选和电脑下（简单 / 普通）或两个人下。小蜜蜂：左右移动飞船打蜜蜂，飞船自动发射，有 3 条命，一关比一关快。是男人就撑过30秒：拖动飞机躲子弹，碰到一颗就结束，时间越长子弹越多。小游戏不计入每天的轮数，不解锁卡片，也没有次数限制。</p>
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
@@ -592,9 +592,89 @@ function playGames() {
   reset();
   app.innerHTML = `<p class="hint">🎮 小游戏：想玩哪一个？</p>
     <div class="menu"><button id="gomoku"><span class="big">⚫</span>五子棋<small>先连成五个就赢了</small></button>
-      <button id="bees"><span class="big">🐝</span>小蜜蜂<small>开飞船，打蜜蜂</small></button></div>`;
+      <button id="bees"><span class="big">🐝</span>小蜜蜂<small>开飞船，打蜜蜂</small></button>
+      <button id="dodge"><span class="big">✈️</span>是男人就撑过30秒<small>开飞机，躲子弹</small></button></div>`;
   document.getElementById('gomoku').onclick = playGomoku;
   document.getElementById('bees').onclick = playBees;
+  document.getElementById('dodge').onclick = playDodge;
+}
+
+function playDodge() {
+  reset();
+  const session = playSession, W = 360, H = 480, GOAL = 30;
+  app.innerHTML = `<p class="hint">✈️ 是男人就撑过30秒：躲开所有子弹，坚持得越久子弹越多</p>
+    <p class="progress" id="hud"></p>
+    <canvas class="arcade" id="arcade"></canvas>
+    <p class="msg" id="msg"></p>
+    <div class="controls"><button class="primary" id="again">重新开始</button></div>
+    <p class="progress">手机：手指按住画面拖动，飞机会跟着移动。电脑：按 ← → ↑ ↓ 键。</p>`;
+  const canvas = document.getElementById('arcade'), ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud'), msg = document.getElementById('msg');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * dpr; canvas.height = H * dpr; ctx.scale(dpr, dpr);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const stars = Array.from({ length: 40 }, () => [Math.random() * W, Math.random() * H]);
+  let px = W / 2, py = H / 2, keys = {}, drag = null, over = false, t = 0, ready = 1.2, spawn = 0, bullets = [], hudText = '', passed = false;
+
+  function addBullet() {
+    const side = Math.floor(Math.random() * 4), along = Math.random();
+    const x = side === 0 ? -8 : side === 1 ? W + 8 : along * W, y = side === 2 ? -8 : side === 3 ? H + 8 : along * H;
+    const angle = Math.atan2(py - y, px - x) + (Math.random() - 0.5) * 0.7;
+    const speed = 80 + Math.random() * 50 + Math.min(t, 60) * 1.2;
+    bullets.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
+  }
+  function update(dt) {
+    px += ((keys.right ? 1 : 0) - (keys.left ? 1 : 0)) * 200 * dt;
+    py += ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)) * 200 * dt;
+    px = Math.max(12, Math.min(W - 12, px)); py = Math.max(12, Math.min(H - 12, py));
+    if (ready > 0) { ready -= dt; return; }
+    t += dt; spawn -= dt;
+    while (spawn <= 0) { addBullet(); spawn += Math.max(0.07, 0.45 - t * 0.011); }
+    bullets.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; });
+    bullets = bullets.filter(b => b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+    if (!passed && t >= GOAL) { passed = true; beep(880); msg.textContent = `🎉 撑过 ${GOAL} 秒了！继续坚持！`; }
+    if (bullets.some(b => Math.hypot(b.x - px, b.y - py) < 10)) {
+      over = true; beep(200);
+      const best = t > (state.dodgeBest || 0);
+      if (best) { state.dodgeBest = t; save(); }
+      msg.textContent = `你坚持了 ${t.toFixed(1)} 秒${passed ? `，撑过了 ${GOAL} 秒，太厉害了！` : '。'}${best ? '这是新的最高纪录！' : ''}`;
+    }
+  }
+  function draw() {
+    ctx.fillStyle = '#12223a'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#7f93b5'; stars.forEach(([x, y]) => ctx.fillRect(x, y, 1.5, 1.5));
+    ctx.fillStyle = '#ffd166'; bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 3.5, 0, 7); ctx.fill(); });
+    ctx.save(); ctx.translate(px, py); ctx.rotate(-Math.PI / 4); ctx.font = '26px sans-serif'; ctx.fillText('✈️', 0, 0); ctx.restore();
+    const text = over ? `坚持了 ${t.toFixed(1)} 秒` : ready > 0 ? '准备…' : '';
+    if (text) { ctx.fillStyle = '#fff'; ctx.font = 'bold 30px sans-serif'; ctx.fillText(text, W / 2, H / 3); }
+    const h = `时间 ${t.toFixed(1)} 秒　最高 ${Math.max(t, state.dodgeBest || 0).toFixed(1)} 秒　子弹 ${bullets.length}`;
+    if (h !== hudText) hud.textContent = hudText = h;
+  }
+  let prev = performance.now();
+  (function frame(now) {
+    if (session !== playSession) return;
+    const dt = Math.min((now - prev) / 1000, 0.05); prev = now;
+    if (!over && dt > 0) update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  })(prev);
+
+  canvas.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY }; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} };
+  canvas.onpointermove = e => {
+    if (!drag) return;
+    const k = W / canvas.getBoundingClientRect().width;
+    px += (e.clientX - drag.x) * k; py += (e.clientY - drag.y) * k;
+    drag = { x: e.clientX, y: e.clientY };
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => { drag = null; };
+  const onKey = e => {
+    const k = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down' }[e.code];
+    if (!k) return;
+    e.preventDefault(); keys[k] = e.type === 'keydown';
+  };
+  document.addEventListener('keydown', onKey); document.addEventListener('keyup', onKey);
+  cleanups.push(() => { document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKey); });
+  document.getElementById('again').onclick = playDodge;
 }
 
 function playBees() {
