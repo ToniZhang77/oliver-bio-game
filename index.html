@@ -236,12 +236,15 @@ function beep(freq) {
   } catch (e) {}
 }
 
-function speak(text) {
+function speak(text, lang = 'en-US', times = 1) {
   if (!state.sound) return;
   try {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US'; u.rate = 0.85;
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
+    speechSynthesis.cancel();
+    for (let n = 0; n < times; n++) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang; u.rate = 0.85;
+      speechSynthesis.speak(u);
+    }
   } catch (e) {}
 }
 
@@ -279,7 +282,7 @@ function home() {
       <p>找一找练选择性注意，拍一拍练冲动控制，记一记练工作记忆。解锁的卡片可以抄到纸质分类卡上，周日小讲座时用。</p>
       <p>认水果每轮 ${FRUIT_QUIZ} 题，优先出还没认识的水果；第一次就选对才算"认识"。打开声音后，选对时会读出英语单词。</p>
       <p>算一算每轮 ${MATH_QUIZ} 题，是 10 以内的加减法。每道题都配有可以数的小动物，算不出来就让他数一数。</p>
-      <p>甲骨文每轮 ${HANZI_QUIZ} 个字，共 ${HANZI.length} 个字，从简单的象形字开始，认识了再出后面的字。先看甲骨文猜字，选对后展示"甲骨文 → 小篆 → 今天"的演变。字形说明是给孩子的简化讲法，个别字的本义学界有不同看法。</p>
+      <p>甲骨文每轮 ${HANZI_QUIZ} 个字，共 ${HANZI.length} 个字，从简单的象形字开始，认识了再出后面的字。打开声音后，选错时会把正确的字读两遍作为提示。先看甲骨文猜字，选对后展示"甲骨文 → 小篆 → 今天"的演变。字形说明是给孩子的简化讲法，个别字的本义学界有不同看法。</p>
       <p>甲骨文字形来自 Oracular 鏡原甲骨文字体（Peichao Qin），小篆字形来自开元小篆与全字库说文解字，均有开放授权，详见
         <a href="https://github.com/ToniZhang77/oliver-bio-game/blob/main/CREDITS.md">CREDITS.md</a>。</p>
       <p>水果照片来自 <a href="https://github.com/fruits-360/fruits-360-100x100">Fruits-360 数据集</a>（Mihai Oltean），
@@ -321,7 +324,8 @@ function playHanzi() {
     buttons.forEach(b => b.onclick = () => {
       if (options[b.dataset.k] !== h) {
         tries++; b.disabled = true; b.classList.add('nope');
-        msg.textContent = '不是这个，再看看它像什么。';
+        msg.textContent = state.sound ? '不是这个。听一听，再看看它像什么。' : '不是这个，再看看它像什么。（打开声音可以听提示）';
+        speak(h.zi, 'zh-CN', 2);
         return;
       }
       buttons.forEach(x => x.disabled = true);
